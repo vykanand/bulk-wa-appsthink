@@ -58,7 +58,11 @@ const WhatsAppBulkSender = (() => {
     phoneColumnSelect: document.getElementById('phone-column'),
     countryCodeSelect: document.getElementById('countryCode'),
 
-    // Limits and Delays
+  // Channel and Limits
+  channelSelect: document.getElementById('channel-select'),
+  emailSubject: document.getElementById('email-subject'),
+
+  // Limits and Delays
     dailyLimitInput: document.getElementById('daily-limit'),
     sessionLimitInput: document.getElementById('session-limit'),
     baseDelayInput: document.getElementById('base-delay'),
@@ -193,6 +197,18 @@ const WhatsAppBulkSender = (() => {
 
           // Show preview section
           document.getElementById('preview-section').classList.remove('hidden');
+        }
+      });
+    }
+
+    // Channel select change: toggle email subject field
+    if (elements.channelSelect) {
+      elements.channelSelect.addEventListener('change', () => {
+        const val = elements.channelSelect.value;
+        const subj = elements.emailSubject;
+        if (subj) {
+          if (val === 'email') subj.classList.remove('hidden');
+          else subj.classList.add('hidden');
         }
       });
     }
@@ -646,14 +662,8 @@ const WhatsAppBulkSender = (() => {
   // Process a single row and send message
   const processRow = async (row, index, phoneColumnIndex, messageTemplate, countryCode) => {
     try {
-      // Get phone number and format it
-      const rawPhoneNumber = row[phoneColumnIndex];
-      if (!rawPhoneNumber) {
-        return { success: false, error: 'No phone number', row: index + 1 };
-      }
-
-      // Format phone number with country code
-      const phoneNumber = formatPhone(rawPhoneNumber, countryCode);
+      // Determine channel
+      const channel = elements.channelSelect?.value || 'whatsapp';
 
       // Prepare message with variables
       let message = messageTemplate;
@@ -667,54 +677,69 @@ const WhatsAppBulkSender = (() => {
         }
       });
 
-      // Check if there's a media attachment from the WhatsApp-like composer
-      const mediaInput = document.getElementById('media-input');
       const composerAttachment = window.currentAttachment?.file;
 
-      let response;
-      if (composerAttachment) {
-        // Send with media attachment using FormData
+      if (channel === 'email') {
+        // Find email column from headers
+        const emailCol = state.headers.findIndex(h => h && ['email', 'email_address', 'e-mail', 'e-mail address', 'mail'].includes(String(h).toLowerCase().trim()));
+        let recipient = null;
+        if (emailCol !== -1) recipient = row[emailCol];
+        // fallback: try to find any cell that looks like an email
+        if (!recipient) {
+          recipient = row.find(c => typeof c === 'string' && c.includes('@'));
+        }
+
+        if (!recipient) {
+          return { success: false, error: 'No recipient email found in row', row: index + 1 };
+        }
+
+        // Subject from composer
+        const subject = elements.emailSubject?.value || 'Notification from Appsthink 360';
+
         const formData = new FormData();
-        formData.append('number', phoneNumber);
+        formData.append('to', String(recipient));
+        formData.append('subject', subject);
         formData.append('message', message);
-        formData.append('media', composerAttachment);
-        formData.append('caption', message);
+        if (composerAttachment) formData.append('media', composerAttachment);
 
-        response = await fetch('/api/send', {
-          method: 'POST',
-          body: formData
-        });
+        const response = await fetch('/api/send-email', { method: 'POST', body: formData });
+        const data = await response.json();
+        if (response.ok && data.success) {
+          return { success: true, phone: recipient, message: data.message || 'Email sent', row: index + 1 };
+        } else {
+          throw new Error(data.error || data.message || 'Failed to send email');
+        }
       } else {
-        // Send as text-only message
-        response = await fetch('/api/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ number: phoneNumber, message })
-        });
-      }
+        // WhatsApp path (unchanged)
+        const rawPhoneNumber = row[phoneColumnIndex];
+        if (!rawPhoneNumber) {
+          return { success: false, error: 'No phone number', row: index + 1 };
+        }
+        const phoneNumber = formatPhone(rawPhoneNumber, countryCode);
 
-      const data = await response.json();
+        let response;
+        if (composerAttachment) {
+          const formData = new FormData();
+          formData.append('number', phoneNumber);
+          formData.append('message', message);
+          formData.append('media', composerAttachment);
+          formData.append('caption', message);
+          response = await fetch('/api/send', { method: 'POST', body: formData });
+        } else {
+          response = await fetch('/api/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ number: phoneNumber, message }) });
+        }
 
-      // Check both HTTP status and API response success field
-      if (response.ok && data.success) {
-        return {
-          success: true,
-          phone: phoneNumber,
-          message: data.message || 'Message sent successfully',
-          row: index + 1
-        };
-      } else {
-        throw new Error(data.error || data.message || 'Failed to send message');
+        const data = await response.json();
+        if (response.ok && data.success) {
+          return { success: true, phone: phoneNumber, message: data.message || 'Message sent successfully', row: index + 1 };
+        } else {
+          throw new Error(data.error || data.message || 'Failed to send message');
+        }
       }
 
     } catch (error) {
-      console.error(`Error sending message to row ${index + 1}:`, error);
-      return {
-        success: false,
-        error: error.message,
-        phone: formatPhone(row[phoneColumnIndex], countryCode) || 'N/A',
-        row: index + 1
-      };
+      console.error(`Error processing row ${index + 1}:`, error);
+      return { success: false, error: error.message, phone: 'N/A', row: index + 1 };
     }
   };
   

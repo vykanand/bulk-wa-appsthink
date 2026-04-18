@@ -1,3 +1,4 @@
+import dotenv from 'dotenv';
 import express from "express";
 import fs from "fs";
 import { unlink, writeFile } from "fs/promises";
@@ -9,6 +10,8 @@ import path from "path";
 import qrcode from "qrcode";
 import { Server as SocketIOServer } from "socket.io";
 import XLSX from "xlsx";
+import { bulkEmailConfig } from './config/bulk-email-config.js';
+dotenv.config();
 
 // Initialize Express and Socket.IO
 const app = express();
@@ -25,6 +28,9 @@ const emailConfig = {
     pass: process.env.EMAIL_PASS || "brqj ftms ktah jyqk",  // App password
   },
 };
+
+// Nodemailer transporter (reused for sending emails)
+const transporter = nodemailer.createTransport(emailConfig);
 
 // Constants
 const PORT = process.env.PORT || 3001;
@@ -111,6 +117,17 @@ const phoneUtils = {
         return { jid: `${formattedNumber}@s.whatsapp.net` };
     }
 };
+
+// Helper: escape user-provided text for safe HTML
+function escapeHtml(unsafe) {
+  if (unsafe === undefined || unsafe === null) return '';
+  return String(unsafe)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
 
 /**
  * Send QR code via email
@@ -210,8 +227,9 @@ const SOCKET_CONFIG = {
   browser: ["Chrome", "Windows", "10"],
   version: [2, 2429, 7],
   connectTimeoutMs: 120000,
-  qrTimeout: 60000,
-  defaultQueryTimeoutMs: 120000,
+  qrTimeout: 120000,
+  // Increase default query timeout to reduce transient 'Timed Out' errors
+  defaultQueryTimeoutMs: 300000,
   retryRequestDelayMs: 3000,
   syncFullHistory: false,
   downloadHistory: false,
@@ -362,6 +380,47 @@ async function connectToWhatsApp() {
 }
 
 // API Routes
+
+// Debug endpoint: show resolved bulk email provider config (values masked)
+app.get('/api/debug-email-config', (req, res) => {
+  try {
+    const providerKey = process.env.BULK_EMAIL_PROVIDER || (typeof bulkEmailConfig !== 'undefined' && (bulkEmailConfig.selected || bulkEmailConfig.default)) || 'gmail';
+    const provider = (typeof bulkEmailConfig !== 'undefined' && bulkEmailConfig.providers && bulkEmailConfig.providers[providerKey]) || null;
+
+    const mask = (v) => {
+      if (!v) return null;
+      const s = String(v);
+      if (s.length <= 4) return '****';
+      return s.slice(0, 2) + '***' + s.slice(-1);
+    };
+
+    const result = {
+      env: {
+        BULK_EMAIL_PROVIDER: process.env.BULK_EMAIL_PROVIDER || null,
+        BULK_GMAIL_USER: process.env.BULK_GMAIL_USER || null,
+        BULK_GMAIL_PASS: process.env.BULK_GMAIL_PASS ? mask(process.env.BULK_GMAIL_PASS) : null,
+        ZOHO_USER: process.env.ZOHO_USER || null,
+        ZOHO_PASS: process.env.ZOHO_PASS ? mask(process.env.ZOHO_PASS) : null,
+        OUTLOOK_USER: process.env.OUTLOOK_USER || null,
+        OUTLOOK_PASS: process.env.OUTLOOK_PASS ? mask(process.env.OUTLOOK_PASS) : null,
+        EMAIL_USER: process.env.EMAIL_USER || null,
+        EMAIL_PASS: process.env.EMAIL_PASS ? mask(process.env.EMAIL_PASS) : null
+      },
+      resolvedProviderKey: providerKey,
+      providerConfigPresent: !!provider,
+      provider: provider ? {
+        host: provider.host || provider.service || null,
+        port: provider.port || null,
+        secure: provider.secure === true,
+        auth: provider.auth ? { user: provider.auth.user || null, pass: provider.auth.pass ? mask(provider.auth.pass) : null } : null
+      } : null
+    };
+
+    return res.json({ success: true, config: result });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 /**
  * Get connection status
@@ -948,6 +1007,70 @@ app.post("/api/send-media", upload.single('media'), async (req, res) => {
       message: process.env.NODE_ENV === 'development' ? error.message : undefined,
       timestamp: new Date().toISOString()
     });
+  }
+});
+
+/**
+ * Send a single email (used by client when channel=email)
+ */
+app.post('/api/send-email', upload.single('media'), async (req, res) => {
+  try {
+    const { to, subject, message } = req.body;
+    const file = req.file;
+
+    if (!to) {
+      return res.status(400).json({ success: false, error: 'Recipient (to) is required' });
+    }
+
+    // Determine bulk email provider to use. Guard in case `bulkEmailConfig` is not available (old process)
+    const providerKey = process.env.BULK_EMAIL_PROVIDER || (typeof bulkEmailConfig !== 'undefined' && (bulkEmailConfig.selected || bulkEmailConfig.default)) || 'gmail';
+    const providerConfig = (typeof bulkEmailConfig !== 'undefined' && bulkEmailConfig.providers && bulkEmailConfig.providers[providerKey]) || null;
+    if (!providerConfig) {
+      // Fallback: use the top-level `emailConfig` (keeps existing Gmail behavior)
+      console.warn('Bulk email provider config missing or unknown, falling back to emailConfig');
+      const fallbackTransporter = nodemailer.createTransport(emailConfig);
+      const safeMessageFallback = escapeHtml(typeof message === 'string' ? message : String(message || ''));
+      const htmlBodyFallback = `<div style="font-family: Calibri, 'Segoe UI', Arial, sans-serif; font-size:10pt; white-space:pre-wrap; color:#000;">${safeMessageFallback}</div>`;
+      const info = await fallbackTransporter.sendMail({
+        from: emailConfig.auth.user,
+        to: String(to),
+        subject: subject || 'Message from Appsthink Whatsapp pro',
+          subject: subject || 'Message from Appsthink 360',
+        text: typeof message === 'string' ? message : String(message || ''),
+        html: htmlBodyFallback,
+        attachments: file ? [{ filename: file.originalname, content: file.buffer, contentType: file.mimetype }] : []
+      });
+      console.log('Bulk email sent via fallback transporter messageId:', info.messageId, 'to', to);
+      return res.json({ success: true, message: 'Email sent (fallback)', info, provider: 'fallback' });
+    }
+
+    // Build mail options; prefer provider auth user, fall back to main emailConfig
+    const fromAddress = (providerConfig.auth && providerConfig.auth.user) || emailConfig.auth.user;
+    const safeMessage = escapeHtml(typeof message === 'string' ? message : String(message || ''));
+    const htmlBody = `<div style="font-family: Calibri, 'Segoe UI', Arial, sans-serif; font-size:10pt; white-space:pre-wrap; color:#000;">${safeMessage}</div>`;
+    const mailOptions = {
+      from: fromAddress,
+      to: String(to),
+      subject: subject || 'Message from Appsthink Whatsapp pro',
+        subject: subject || 'Message from Appsthink 360',
+      text: typeof message === 'string' ? message : String(message || ''),
+      html: htmlBody,
+      attachments: []
+    };
+
+    if (file) {
+      mailOptions.attachments.push({ filename: file.originalname, content: file.buffer, contentType: file.mimetype });
+    }
+
+    // Create transporter for the selected provider (keeps QR-email transporter unchanged)
+    const bulkTransporter = nodemailer.createTransport(providerConfig);
+
+    const info = await bulkTransporter.sendMail(mailOptions);
+    console.log('Bulk email sent via', providerKey, 'messageId:', info.messageId, 'to', to);
+    return res.json({ success: true, message: 'Email sent', info, provider: providerKey });
+  } catch (error) {
+    console.error('Error in /api/send-email:', error);
+    return res.status(500).json({ success: false, error: error.message });
   }
 });
 

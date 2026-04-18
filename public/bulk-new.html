@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Appsthink Whatsapp pro</title>
+    <title>Appsthink 360</title>
     
     <!-- CSS Dependencies -->
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
@@ -32,8 +32,18 @@
                             <i class="fab fa-whatsapp text-2xl text-white"></i>
                         </div>
                         <div class="flex flex-col justify-center">
-                            <h1 class="text-2xl font-extrabold tracking-tight leading-tight">Appsthink Whatsapp pro</h1>
+                            <h1 class="text-2xl font-extrabold tracking-tight leading-tight">Appsthink 360</h1>
                             <p class="text-sm text-white/80 font-medium leading-none mt-0">Bulk messaging & campaign composer</p>
+                        </div>
+                    </div>
+
+                    <!-- Center: Channel selector (default WhatsApp) -->
+                    <div class="flex-1 flex justify-center">
+                        <div class="w-40">
+                            <select id="channel-select" class="w-full text-sm px-3 py-1.5 border rounded-md bg-white text-green-700 border-gray-200" title="Select channel">
+                                <option value="whatsapp" selected>WhatsApp</option>
+                                <option value="email">Email</option>
+                            </select>
                         </div>
                     </div>
 
@@ -218,6 +228,7 @@
                             </div>
 
                             <!-- Message Input -->
+                            <input type="text" id="email-subject" class="form-control mb-3 hidden" placeholder="Email subject (visible when Email channel selected)">
                             <textarea 
                                 id="message" 
                                 class="form-control resize-none" 
@@ -457,7 +468,9 @@
                         </div>
                     </div>
                     
-                    <div class="flex space-x-2">
+                    <div class="flex items-center space-x-2">
+                        <!-- Channel selector moved to header -->
+
                         <button id="start-sending" class="btn btn-primary">
                             <i class="fas fa-paper-plane mr-2"></i> Start Sending
                         </button>
