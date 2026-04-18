@@ -242,11 +242,33 @@ async function connectToWhatsApp() {
         if (
           statusCode === DisconnectReason.loggedOut ||
           errorMessage.includes("invalid") ||
-          errorMessage.includes("expired")
+          errorMessage.includes("expired") ||
+          errorMessage.includes("conflict")
         ) {
           console.log(
             "Session expired or invalid. Will need new QR code on reconnection."
           );
+          // Reset QR flag to generate new QR on next connection
+          qrGenerated = false;
+          credsSavedThisSession = false;
+
+          // Auto-delete auth directory to force fresh QR code
+          try {
+            if (fs.existsSync(AUTH_DIR)) {
+              console.log("🗑️ Deleting auth directory due to logout...");
+              fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+              console.log("✅ Auth directory deleted successfully");
+            }
+          } catch (error) {
+            console.error("❌ Error deleting auth directory:", error.message);
+          }
+
+          // Reconnect to generate new QR code and send via email
+          console.log("🔄 Reconnecting to generate new QR code...");
+          isConnected = false;
+          isConnecting = false;
+          setTimeout(connectToWhatsApp, 5000);
+          return;
         }
 
         const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
