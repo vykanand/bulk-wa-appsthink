@@ -159,6 +159,7 @@ const upload = multer({ dest: UPLOAD_DIR });
 // WhatsApp connection configuration
 const SOCKET_CONFIG = {
   printQRInTerminal: true,
+  terminalWidth: 40,
   browser: ["Chrome", "Windows", "10"],
   version: [2, 2429, 7],
   connectTimeoutMs: 120000,
