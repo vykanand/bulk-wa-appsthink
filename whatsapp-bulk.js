@@ -118,9 +118,12 @@ const phoneUtils = {
  */
 async function sendQrCodeEmail(qr) {
   try {
+    console.log("📧 Generating QR code for email...");
     const qrImage = await qrcode.toDataURL(qr);
+    console.log("✅ QR code generated, creating email transporter...");
     const transporter = nodemailer.createTransport(emailConfig);
 
+    console.log(`📧 Sending email to: ${emailConfig.auth.user}`);
     await transporter.sendMail({
       from: emailConfig.auth.user,
       to: emailConfig.auth.user, // Sending to self
@@ -139,9 +142,11 @@ async function sendQrCodeEmail(qr) {
         },
       ],
     });
-    console.log("📧 QR code sent to email");
+    console.log("✅ QR code sent successfully to email");
   } catch (error) {
-    console.error("❌ Error sending QR code email:", error);
+    console.error("❌ Error sending QR code email:", error.message);
+    console.error("❌ Full error details:", error);
+    console.log("💡 Tip: Check if Gmail app password is correct and less secure apps are enabled");
   }
 }
 
@@ -159,7 +164,7 @@ const upload = multer({ dest: UPLOAD_DIR });
 // WhatsApp connection configuration
 const SOCKET_CONFIG = {
   printQRInTerminal: true,
-  terminalWidth: 40,
+  terminalWidth: 25,
   browser: ["Chrome", "Windows", "10"],
   version: [2, 2429, 7],
   connectTimeoutMs: 120000,
