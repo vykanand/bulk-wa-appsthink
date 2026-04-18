@@ -70,6 +70,55 @@ const WhatsAppBulkSender = (() => {
     // Update DOM elements
     updateDOMElements();
 
+    // Ensure global attachment object exists for composer (new feature compatibility)
+    window.currentAttachment = window.currentAttachment || { file: null };
+
+    // Wire composer attach buttons to the hidden file input if present
+    try {
+      const mediaInputEl = document.getElementById('media-input');
+      const attachImageBtn = document.getElementById('attach-image');
+      const attachPdfBtn = document.getElementById('attach-pdf');
+      const attachDocBtn = document.getElementById('attach-doc');
+      const attachPptBtn = document.getElementById('attach-ppt');
+      const attachFileBtn = document.getElementById('attach-file');
+
+      const triggerAccept = (accept) => {
+        if (!mediaInputEl) return;
+        mediaInputEl.accept = accept;
+        mediaInputEl.click();
+      };
+
+      // Note: attach buttons are already wired in the inline HTML script.
+      // We deliberately avoid adding duplicate click listeners here to prevent
+      // the file dialog from opening twice. The `mediaInputEl` change handler
+      // below keeps `window.currentAttachment` in sync.
+
+      // Ensure the media input change updates the shared window.currentAttachment and shows preview
+      if (mediaInputEl) {
+        mediaInputEl.addEventListener('change', function(e) {
+          const file = e.target.files && e.target.files[0];
+          if (file) {
+            // keep a reference on window for the bulk sender
+            window.currentAttachment.file = file;
+
+            // If the inline page script provides handleFileSelect, call it to update UI
+            if (typeof window.handleFileSelect === 'function') {
+              try { window.handleFileSelect(file); } catch (err) { /* ignore */ }
+            } else {
+              // Fallback: reveal preview elements if present
+              const attachmentPreview = document.getElementById('attachment-preview');
+              const previewAttachment = document.getElementById('preview-attachment');
+              if (attachmentPreview) attachmentPreview.classList.remove('hidden');
+              if (previewAttachment) previewAttachment.classList.remove('hidden');
+            }
+          }
+        });
+      }
+    } catch (err) {
+      // non-fatal - composer enhancements optional
+      console.warn('Composer attachment init skipped:', err?.message || err);
+    }
+
     // Load persistent country code
     const savedCountryCode = localStorage.getItem('selectedCountryCode');
     if (savedCountryCode && elements.countryCodeSelect) {

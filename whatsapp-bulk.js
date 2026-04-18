@@ -1,15 +1,14 @@
 import express from "express";
-import { makeWASocket, useMultiFileAuthState, DisconnectReason } from "maher-zubair-baileys";
-import qrcode from "qrcode";
-import { writeFile, unlink } from "fs/promises";
 import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
-import multer from "multer";
-import XLSX from "xlsx";
+import { unlink, writeFile } from "fs/promises";
 import http from "http";
-import { Server as SocketIOServer } from "socket.io";
+import { DisconnectReason, makeWASocket, useMultiFileAuthState } from "maher-zubair-baileys";
+import multer from "multer";
 import nodemailer from "nodemailer";
+import path from "path";
+import qrcode from "qrcode";
+import { Server as SocketIOServer } from "socket.io";
+import XLSX from "xlsx";
 
 // Initialize Express and Socket.IO
 const app = express();
@@ -197,8 +196,13 @@ fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 app.use(express.json());
 app.use(express.static(path.join(process.cwd(), "public")));
 
-// Configure multer for file uploads
-const upload = multer({ dest: UPLOAD_DIR });
+// Configure multer for file uploads using memory storage to avoid corruption
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 50 * 1024 * 1024 // 50MB limit
+  }
+});
 
 // WhatsApp connection configuration
 const SOCKET_CONFIG = {
@@ -592,23 +596,48 @@ app.post("/api/send", upload.single('media'), async (req, res) => {
         const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
         const videoExtensions = ['mp4', 'mov', 'avi'];
         const documentExtensions = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'];
+
+        // Explicit MIME type map — browser-reported MIME types can be wrong (e.g.
+        // application/octet-stream for PDF), which causes WhatsApp to receive the
+        // file with the wrong type and refuse to open it.
+        const mimeTypeMap = {
+          pdf:  'application/pdf',
+          doc:  'application/msword',
+          docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          ppt:  'application/vnd.ms-powerpoint',
+          pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+          xls:  'application/vnd.ms-excel',
+          xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          jpg:  'image/jpeg',
+          jpeg: 'image/jpeg',
+          png:  'image/png',
+          gif:  'image/gif',
+          webp: 'image/webp',
+          mp4:  'video/mp4',
+          mov:  'video/quicktime',
+          avi:  'video/x-msvideo',
+        };
+        const resolvedMimeType = mimeTypeMap[ext] || mediaFile.mimetype || 'application/octet-stream';
         
-        const mediaBuffer = fs.readFileSync(mediaFile.path);
+        // Create a fresh Buffer copy to ensure binary integrity
+        const mediaBuffer = Buffer.from(mediaFile.buffer);
         
         if (imageExtensions.includes(ext)) {
           messageOptions = {
             image: mediaBuffer,
+            mimetype: resolvedMimeType,
             caption: caption || message || ''
           };
         } else if (videoExtensions.includes(ext)) {
           messageOptions = {
             video: mediaBuffer,
+            mimetype: resolvedMimeType,
             caption: caption || message || ''
           };
         } else if (documentExtensions.includes(ext)) {
           messageOptions = {
             document: mediaBuffer,
-            mimetype: mediaFile.mimetype,
+            mimetype: resolvedMimeType,
             caption: caption || message || '',
             fileName: mediaFile.originalname
           };
@@ -616,7 +645,7 @@ app.post("/api/send", upload.single('media'), async (req, res) => {
           // Treat as generic document
           messageOptions = {
             document: mediaBuffer,
-            mimetype: mediaFile.mimetype || 'application/octet-stream',
+            mimetype: resolvedMimeType,
             caption: caption || message || '',
             fileName: mediaFile.originalname
           };
@@ -632,11 +661,6 @@ app.post("/api/send", upload.single('media'), async (req, res) => {
       await globalSock.sendMessage(jid, messageOptions);
       
       console.log('Message sent successfully to:', jid);
-      
-      // Clean up uploaded file
-      if (mediaFile) {
-        await unlink(mediaFile.path);
-      }
       
       // Emit stats update to connected clients
       io.emit('statsUpdate', {
@@ -669,15 +693,6 @@ app.post("/api/send", upload.single('media'), async (req, res) => {
         number,
         originalError: sendError
       });
-      
-      // Clean up uploaded file on error
-      if (mediaFile) {
-        try {
-          await unlink(mediaFile.path);
-        } catch (cleanupError) {
-          console.error('Error cleaning up file:', cleanupError);
-        }
-      }
       
       // Check for specific WhatsApp Web errors
       let errorMessage = sendError.message || 'Failed to send message';
@@ -808,7 +823,8 @@ app.post("/api/send-media", upload.single('media'), async (req, res) => {
         const videoExtensions = ['mp4', 'mov', 'avi'];
         const documentExtensions = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'];
         
-        const mediaBuffer = fs.readFileSync(mediaFile.path);
+        // Use memory buffer directly to avoid corruption
+        const mediaBuffer = mediaFile.buffer;
         
         if (imageExtensions.includes(ext)) {
           messageOptions = {
@@ -947,8 +963,8 @@ app.post("/api/send-bulk", upload.single('file'), async (req, res) => {
       });
     }
 
-    // Read the uploaded file
-    const workbook = XLSX.readFile(req.file.path);
+    // Read the uploaded file from memory buffer (multer uses memoryStorage)
+    const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
     
@@ -956,9 +972,6 @@ app.post("/api/send-bulk", upload.single('file'), async (req, res) => {
     const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
     const headers = jsonData[0];
     const rows = jsonData.slice(1);
-
-    // Clean up uploaded file
-    await unlink(req.file.path);
 
     if (!globalSock || !isConnected) {
       return res.status(503).json({ 
