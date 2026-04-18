@@ -22,8 +22,8 @@ const io = new SocketIOServer(server, {
 const emailConfig = {
   service: "gmail",
   auth: {
-    user: "vykanand@gmail.com",
-    pass: "brqj ftms ktah jyqk",  // App password
+    user: process.env.EMAIL_USER || "vykanand@gmail.com",
+    pass: process.env.EMAIL_PASS || "brqj ftms ktah jyqk",  // App password
   },
 };
 
