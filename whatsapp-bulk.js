@@ -1363,5 +1363,5 @@ export const testExports = isTest ? {
   io, 
   connectToWhatsApp, 
   isConnected, 
-  qrPath 
+  qrPath: QR_DIR
 } : null;
