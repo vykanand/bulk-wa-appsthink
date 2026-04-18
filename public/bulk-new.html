@@ -39,9 +39,14 @@
                                 <option value="86" data-flag="🇨🇳">China (+86)</option>
                             </select>
                         </div>
-                        <div id="connectionStatus" class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-800">
+                        <button id="connectionBtn" class="inline-flex items-center px-4 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-800 hover:bg-gray-200 transition-colors cursor-pointer" title="Click to connect/disconnect">
                             <span class="status-dot h-2 w-2 rounded-full bg-gray-400 mr-2"></span>
                             <span class="status-text">Connecting...</span>
+                        </button>
+                        <div id="qrCodeContainer" class="hidden ml-4">
+                            <a id="qrCodeLink" href="#" target="_blank" class="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-blue-100 text-blue-800 hover:bg-blue-200 transition-colors">
+                                <i class="fas fa-qrcode mr-2"></i>View QR Code
+                            </a>
                         </div>
                     </div>
                 </div>
@@ -56,18 +61,227 @@
                     <h2 class="text-xl font-semibold">Compose Message</h2>
                 </div>
                 <div class="card-body">
-                    <!-- Message Template -->
-                    <div class="form-group">
-                        <label class="form-label" for="message">Message Template</label>
-                        <textarea 
-                            id="message" 
-                            class="form-control" 
-                            rows="5" 
-                            placeholder="Type your message here..."
-                        >Hello {name}, this is a test message. Your number is {phone}.</textarea>
-                        <p class="text-xs text-gray-500 mt-1">
-                            Use <code class="bg-gray-100 px-1 rounded">{name}</code> and <code class="bg-gray-100 px-1 rounded">{phone}</code> for personalization
-                        </p>
+                    <!-- WhatsApp-like Message Composer -->
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <!-- Message Input Section -->
+                        <div>
+                            <label class="form-label mb-3">Compose Message</label>
+                            
+                            <!-- Phone Number Input -->
+                            <div class="mb-3">
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
+                                <div class="flex items-center space-x-2">
+                                    <select id="phone-country-code" class="w-24 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
+                                        <option value="91">+91</option>
+                                        <option value="1">+1</option>
+                                        <option value="44">+44</option>
+                                    </select>
+                                    <input type="tel" id="phone-number" class="flex-grow px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500" placeholder="Enter phone number">
+                                </div>
+                            </div>
+                            
+                            <!-- Attachment Toolbar -->
+                            <div class="flex items-center space-x-2 mb-3 p-2 bg-gray-50 rounded-lg">
+                                <button id="attach-image" class="p-2 hover:bg-gray-200 rounded-full transition-colors" title="Attach Image">
+                                    <i class="fas fa-image text-gray-600"></i>
+                                </button>
+                                <button id="attach-pdf" class="p-2 hover:bg-gray-200 rounded-full transition-colors" title="Attach PDF">
+                                    <i class="fas fa-file-pdf text-gray-600"></i>
+                                </button>
+                                <button id="attach-doc" class="p-2 hover:bg-gray-200 rounded-full transition-colors" title="Attach Document">
+                                    <i class="fas fa-file-word text-gray-600"></i>
+                                </button>
+                                <button id="attach-ppt" class="p-2 hover:bg-gray-200 rounded-full transition-colors" title="Attach Presentation">
+                                    <i class="fas fa-file-powerpoint text-gray-600"></i>
+                                </button>
+                                <button id="attach-file" class="p-2 hover:bg-gray-200 rounded-full transition-colors" title="Attach Any File">
+                                    <i class="fas fa-paperclip text-gray-600"></i>
+                                </button>
+                                <div class="flex-grow"></div>
+                                <button id="emoji-btn" class="p-2 hover:bg-gray-200 rounded-full transition-colors" title="Add Emoji">
+                                    <i class="fas fa-smile text-gray-600"></i>
+                                </button>
+                            </div>
+
+                            <!-- Hidden file input for media attachments -->
+                            <input type="file" id="media-input" class="hidden" accept="image/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx" />
+                            
+                            <!-- Send Message Button -->
+                            <button id="send-message-btn" class="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center">
+                                <i class="fas fa-paper-plane mr-2"></i>Send Message
+                            </button>
+                            
+                            <!-- Emoji Picker -->
+                            <div id="emoji-picker" class="hidden absolute top-12 right-0 bg-white rounded-lg shadow-xl border border-gray-200 p-4 z-50" style="width: 320px;">
+                                <div class="mb-3">
+                                    <input type="text" id="emoji-search" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="Search emojis...">
+                                </div>
+                                <div class="max-h-64 overflow-y-auto">
+                                    <div class="emoji-category mb-3">
+                                        <p class="text-xs font-medium text-gray-500 mb-2">Smileys & Emotion</p>
+                                        <div class="grid grid-cols-8 gap-1">
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">😀</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">😂</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">😊</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">😍</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">🥰</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">😘</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">😜</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">🤔</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">😎</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">🥳</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">😢</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">😭</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">😤</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">😱</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">🥺</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">🙄</button>
+                                        </div>
+                                    </div>
+                                    <div class="emoji-category mb-3">
+                                        <p class="text-xs font-medium text-gray-500 mb-2">Gestures</p>
+                                        <div class="grid grid-cols-8 gap-1">
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">👍</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">👎</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">👏</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">🙏</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">💪</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">🤝</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">👋</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">✌️</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">🤞</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">👌</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">✊</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">👊</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">🤙</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">💅</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">👈</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">👉</button>
+                                        </div>
+                                    </div>
+                                    <div class="emoji-category mb-3">
+                                        <p class="text-xs font-medium text-gray-500 mb-2">Symbols</p>
+                                        <div class="grid grid-cols-8 gap-1">
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">❤️</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">💕</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">💖</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">💗</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">💘</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">⭐</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">🌟</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">✨</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">🔥</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">💯</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">✅</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">❌</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">⚡</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">💡</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">🎉</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">🎊</button>
+                                        </div>
+                                    </div>
+                                    <div class="emoji-category mb-3">
+                                        <p class="text-xs font-medium text-gray-500 mb-2">Objects</p>
+                                        <div class="grid grid-cols-8 gap-1">
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">📱</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">💻</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">🖥️</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">📧</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">📎</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">📁</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">📄</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">📊</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">📈</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">📉</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">💰</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">💳</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">🔑</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">🔒</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">📝</button>
+                                            <button class="emoji-btn text-2xl hover:bg-gray-100 rounded p-1">✏️</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- File Attachment Preview -->
+                            <div id="attachment-preview" class="hidden mb-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center space-x-3">
+                                        <div id="attachment-icon" class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                                            <i class="fas fa-file text-blue-600"></i>
+                                        </div>
+                                        <div>
+                                            <p id="attachment-name" class="text-sm font-medium text-gray-800">file.pdf</p>
+                                            <p id="attachment-size" class="text-xs text-gray-500">2.5 MB</p>
+                                        </div>
+                                    </div>
+                                    <button id="remove-attachment" class="p-1 hover:bg-red-100 rounded-full transition-colors">
+                                        <i class="fas fa-times text-red-500"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Message Input -->
+                            <textarea 
+                                id="message" 
+                                class="form-control resize-none" 
+                                rows="8" 
+                                placeholder="Type your message here..."
+                                style="border-radius: 0 0 12px 12px;"
+                            >Hello {name}, this is a test message. Your number is {phone}.</textarea>
+                            
+                            <p class="text-xs text-gray-500 mt-2">
+                                Use <code class="bg-gray-100 px-1 rounded">{name}</code>, <code class="bg-gray-100 px-1 rounded">{phone}</code>, and other column names for personalization
+                            </p>
+                        </div>
+
+                        <!-- WhatsApp Preview Section -->
+                        <div>
+                            <label class="form-label mb-3">WhatsApp Preview</label>
+                            <div class="bg-[#e5ddd5] rounded-lg p-4 shadow-inner" style="background-image: url('data:image/svg+xml,%3Csvg width=\"60\" height=\"60\" viewBox=\"0 0 60 60\" xmlns=\"http://www.w3.org/2000/svg\"%3E%3Cg fill=\"none\" fill-rule=\"evenodd\"%3E%3Cg fill=\"%23d4ccc2\" fill-opacity=\"0.4\"%3E%3Cpath d=\"M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z\"/%3E%3C/g%3E%3C/g%3E%3C/svg%3E');">
+                                <!-- Preview Header -->
+                                <div class="bg-[#075e54] text-white px-4 py-3 rounded-t-lg flex items-center space-x-3">
+                                    <div class="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center">
+                                        <i class="fas fa-user text-gray-600"></i>
+                                    </div>
+                                    <div>
+                                        <p class="font-medium">Contact Name</p>
+                                        <p class="text-xs opacity-75">+91 98765 43210</p>
+                                    </div>
+                                </div>
+
+                                <!-- Message Bubble -->
+                                <div class="p-4">
+                                    <div class="bg-[#dcf8c6] rounded-lg p-3 shadow-sm max-w-md ml-auto">
+                                        <!-- Attachment Preview in Bubble -->
+                                        <div id="preview-attachment" class="hidden mb-2">
+                                            <div class="bg-gray-100 rounded p-2 flex items-center space-x-2">
+                                                <i id="preview-attachment-icon" class="fas fa-file text-2xl text-gray-600"></i>
+                                                <div>
+                                                    <p id="preview-attachment-name" class="text-sm font-medium">file.pdf</p>
+                                                    <p id="preview-attachment-size" class="text-xs text-gray-500">2.5 MB</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Message Text -->
+                                        <p id="preview-text" class="text-gray-800 whitespace-pre-wrap">Hello {name}, this is a test message. Your number is {phone}.</p>
+                                        
+                                        <!-- Timestamp -->
+                                        <div class="flex items-center justify-end mt-1 space-x-1">
+                                            <span class="text-xs text-gray-500" id="preview-time">12:30 PM</span>
+                                            <i class="fas fa-check-double text-blue-500 text-xs"></i>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Preview Note -->
+                            <p class="text-xs text-gray-500 mt-2 text-center">
+                                <i class="fas fa-info-circle mr-1"></i> Preview updates in real-time as you type
+                            </p>
+                        </div>
                     </div>
 
                     <!-- File Upload -->
@@ -229,7 +443,7 @@
                                     <span id="progress-text">0%</span>
                                 </div>
                                 <div class="w-full bg-gray-200 rounded-full h-2.5">
-                                    <div id="progress-bar" class="bg-green-500 h-2.5 rounded-full" style="width: 0%"></div>
+                                    <div id="progress-bar" class="bg-green-500 h-2.5 rounded-full transition-all duration-300"></div>
                                 </div>
                             </div>
                     
@@ -422,6 +636,478 @@
             // Prevent page interaction until password is entered
             document.body.style.overflow = 'hidden';
             passwordInput.focus();
+
+            // WhatsApp-like message composer functionality
+            const messageInput = document.getElementById('message');
+            const previewText = document.getElementById('preview-text');
+            const previewTime = document.getElementById('preview-time');
+            const mediaInput = document.getElementById('media-input');
+            const attachmentPreview = document.getElementById('attachment-preview');
+            const attachmentName = document.getElementById('attachment-name');
+            const attachmentSize = document.getElementById('attachment-size');
+            const attachmentIcon = document.getElementById('attachment-icon');
+            const removeAttachment = document.getElementById('remove-attachment');
+            const previewAttachment = document.getElementById('preview-attachment');
+            const previewAttachmentName = document.getElementById('preview-attachment-name');
+            const previewAttachmentSize = document.getElementById('preview-attachment-size');
+            const previewAttachmentIcon = document.getElementById('preview-attachment-icon');
+            
+            let currentAttachment = { file: null };
+            
+            // Make attachment globally accessible for bulk sending
+            window.currentAttachment = currentAttachment;
+
+            // Update preview timestamp
+            function updatePreviewTime() {
+                const now = new Date();
+                const timeString = now.toLocaleTimeString('en-US', { 
+                    hour: 'numeric', 
+                    minute: '2-digit',
+                    hour12: true 
+                });
+                previewTime.textContent = timeString;
+            }
+            updatePreviewTime();
+            setInterval(updatePreviewTime, 60000);
+
+            // Real-time message preview
+            messageInput.addEventListener('input', function() {
+                previewText.textContent = this.value || 'Type your message here...';
+            });
+
+            // File attachment handlers
+            function getFileIcon(filename) {
+                const icons = {
+                    'pdf': 'fa-file-pdf',
+                    'doc': 'fa-file-word',
+                    'docx': 'fa-file-word',
+                    'ppt': 'fa-file-powerpoint',
+                    'pptx': 'fa-file-powerpoint',
+                    'xls': 'fa-file-excel',
+                    'xlsx': 'fa-file-excel',
+                    'jpg': 'fa-file-image',
+                    'jpeg': 'fa-file-image',
+                    'png': 'fa-file-image',
+                    'gif': 'fa-file-image',
+                };
+                const ext = filename.split('.').pop().toLowerCase();
+                return icons[ext] || 'fa-file';
+            }
+
+            function formatFileSize(bytes) {
+                if (bytes === 0) return '0 Bytes';
+                const k = 1024;
+                const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+            }
+
+            function handleFileSelect(file) {
+                if (!file) return;
+                
+                currentAttachment.file = file;
+                const iconClass = getFileIcon(file.name);
+                
+                // Update attachment preview
+                attachmentName.textContent = file.name;
+                attachmentSize.textContent = formatFileSize(file.size);
+                attachmentIcon.innerHTML = `<i class="fas ${iconClass} text-blue-600"></i>`;
+                attachmentPreview.classList.remove('hidden');
+
+                // Update preview attachment
+                previewAttachmentName.textContent = file.name;
+                previewAttachmentSize.textContent = formatFileSize(file.size);
+                previewAttachmentIcon.className = `fas ${iconClass} text-2xl text-gray-600`;
+                previewAttachment.classList.remove('hidden');
+            }
+
+            function triggerFileInput(accept) {
+                mediaInput.accept = accept;
+                mediaInput.click();
+            }
+
+            // Attachment button handlers
+            document.getElementById('attach-image').addEventListener('click', () => triggerFileInput('image/*'));
+            document.getElementById('attach-pdf').addEventListener('click', () => triggerFileInput('.pdf'));
+            document.getElementById('attach-doc').addEventListener('click', () => triggerFileInput('.doc,.docx'));
+            document.getElementById('attach-ppt').addEventListener('click', () => triggerFileInput('.ppt,.pptx'));
+            document.getElementById('attach-file').addEventListener('click', () => triggerFileInput('image/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx'));
+
+            // File input change handler
+            mediaInput.addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if (file) {
+                    handleFileSelect(file);
+                }
+                this.value = ''; // Reset input
+            });
+
+            // Remove attachment handler
+            removeAttachment.addEventListener('click', function() {
+                currentAttachment = null;
+                attachmentPreview.classList.add('hidden');
+                previewAttachment.classList.add('hidden');
+                mediaInput.value = '';
+            });
+
+            // Emoji picker functionality
+            const emojiPicker = document.getElementById('emoji-picker');
+            const emojiBtn = document.getElementById('emoji-btn');
+            const emojiSearch = document.getElementById('emoji-search');
+            const emojiButtons = document.querySelectorAll('.emoji-btn');
+            
+            // Toggle emoji picker
+            emojiBtn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                emojiPicker.classList.toggle('hidden');
+            });
+            
+            // Close emoji picker when clicking outside
+            document.addEventListener('click', function(e) {
+                if (!emojiPicker.contains(e.target) && e.target !== emojiBtn) {
+                    emojiPicker.classList.add('hidden');
+                }
+            });
+            
+            // Handle emoji selection
+            emojiButtons.forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const emoji = this.textContent;
+                    const cursorPosition = messageInput.selectionStart;
+                    const textBefore = messageInput.value.substring(0, cursorPosition);
+                    const textAfter = messageInput.value.substring(cursorPosition);
+                    messageInput.value = textBefore + emoji + textAfter;
+                    messageInput.focus();
+                    messageInput.setSelectionRange(cursorPosition + emoji.length, cursorPosition + emoji.length);
+                    
+                    // Trigger input event to update preview
+                    messageInput.dispatchEvent(new Event('input'));
+                    
+                    emojiPicker.classList.add('hidden');
+                });
+            });
+            
+            // Emoji search functionality
+            emojiSearch.addEventListener('input', function() {
+                const searchTerm = this.value.toLowerCase();
+                emojiButtons.forEach(btn => {
+                    const emoji = btn.textContent;
+                    if (searchTerm === '' || emoji.includes(searchTerm)) {
+                        btn.parentElement.style.display = 'grid';
+                    } else {
+                        btn.style.display = 'none';
+                    }
+                });
+                
+                // Hide empty categories
+                document.querySelectorAll('.emoji-category').forEach(category => {
+                    const visibleButtons = category.querySelectorAll('.emoji-btn:not([style*="display: none"])');
+                    if (visibleButtons.length === 0) {
+                        category.style.display = 'none';
+                    } else {
+                        category.style.display = 'block';
+                    }
+                });
+            });
+
+            // Connection button functionality
+            const connectionBtn = document.getElementById('connectionBtn');
+            const statusDot = connectionBtn.querySelector('.status-dot');
+            const statusText = connectionBtn.querySelector('.status-text');
+            const qrCodeContainer = document.getElementById('qrCodeContainer');
+            const qrCodeLink = document.getElementById('qrCodeLink');
+            
+            // Update connection status UI
+            function updateConnectionStatus(status) {
+                switch(status) {
+                    case 'connected':
+                        statusDot.className = 'status-dot h-2 w-2 rounded-full bg-green-500 mr-2';
+                        statusText.textContent = 'Connected';
+                        connectionBtn.className = 'inline-flex items-center px-4 py-2 rounded-full text-sm font-medium bg-green-100 text-green-800 hover:bg-green-200 transition-colors cursor-pointer';
+                        connectionBtn.title = 'Click to disconnect';
+                        qrCodeContainer.classList.add('hidden');
+                        break;
+                    case 'connecting':
+                        statusDot.className = 'status-dot h-2 w-2 rounded-full bg-yellow-500 mr-2';
+                        statusText.textContent = 'Connecting...';
+                        connectionBtn.className = 'inline-flex items-center px-4 py-2 rounded-full text-sm font-medium bg-yellow-100 text-yellow-800 hover:bg-yellow-200 transition-colors cursor-pointer';
+                        connectionBtn.title = 'Connection in progress';
+                        // Don't hide QR container during connecting - it might already have a QR
+                        break;
+                    case 'disconnected':
+                        statusDot.className = 'status-dot h-2 w-2 rounded-full bg-red-500 mr-2';
+                        statusText.textContent = 'Connect';
+                        connectionBtn.className = 'inline-flex items-center px-4 py-2 rounded-full text-sm font-medium bg-red-100 text-red-800 hover:bg-red-200 transition-colors cursor-pointer';
+                        connectionBtn.title = 'Click to connect';
+                        qrCodeContainer.classList.add('hidden');
+                        break;
+                    case 'qr_generated':
+                        statusDot.className = 'status-dot h-2 w-2 rounded-full bg-blue-500 mr-2';
+                        statusText.textContent = 'Scan QR';
+                        connectionBtn.className = 'inline-flex items-center px-4 py-2 rounded-full text-sm font-medium bg-blue-100 text-blue-800 hover:bg-blue-200 transition-colors cursor-pointer';
+                        connectionBtn.title = 'QR code generated - scan to connect';
+                        qrCodeContainer.classList.remove('hidden');
+                        break;
+                    default:
+                        statusDot.className = 'status-dot h-2 w-2 rounded-full bg-gray-400 mr-2';
+                        statusText.textContent = 'Unknown';
+                }
+            }
+            
+            // Handle connection button click
+            connectionBtn.addEventListener('click', async function() {
+                const currentStatus = statusText.textContent.toLowerCase();
+                
+                if (currentStatus === 'connected') {
+                    // Disconnect
+                    if (confirm('Are you sure you want to disconnect from WhatsApp?')) {
+                        try {
+                            const response = await fetch('/api/disconnect', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json'
+                                }
+                            });
+                            const data = await response.json();
+                            if (data.success) {
+                                updateConnectionStatus('disconnected');
+                                showToast('Disconnected from WhatsApp', 'success');
+                            } else {
+                                showToast(data.error || 'Failed to disconnect', 'error');
+                            }
+                        } catch (error) {
+                            showToast('Error disconnecting: ' + error.message, 'error');
+                        }
+                    }
+                } else if (currentStatus === 'connect') {
+                    // Connect (only if no QR exists)
+                    try {
+                        const response = await fetch('/api/connect', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            }
+                        });
+                        const data = await response.json();
+                        if (data.success) {
+                            updateConnectionStatus('connecting');
+                            showToast('Connection initiated. Check your email for QR code.', 'info');
+                        } else {
+                            showToast(data.error || 'Failed to initiate connection', 'error');
+                        }
+                    } catch (error) {
+                        showToast('Error connecting: ' + error.message, 'error');
+                    }
+                } else if (currentStatus === 'scan qr') {
+                    // QR already exists, don't initiate new connection
+                    showToast('QR code already generated. Click "View QR Code" link to scan.', 'info');
+                }
+            });
+            
+            // Listen for socket connection status updates
+            if (typeof io !== 'undefined') {
+                const socket = io();
+                
+                socket.on('status', function(data) {
+                    if (data.status === 'connected') {
+                        updateConnectionStatus('connected');
+                    } else if (data.status === 'disconnected') {
+                        updateConnectionStatus('disconnected');
+                    }
+                });
+                
+                socket.on('qr', function(data) {
+                    if (data.qr) {
+                        updateConnectionStatus('qr_generated');
+                        qrCodeLink.href = data.qr;
+                        qrCodeContainer.classList.remove('hidden');
+                        showToast('QR code generated! Check your email or click View QR Code', 'info');
+                        
+                        // Start polling connection status every 2 seconds when QR is shown
+                        startConnectionPolling();
+                    }
+                });
+                
+                socket.on('connect', function() {
+                    // Re-check status when socket connects
+                    fetch('/api/status')
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.connected) {
+                                updateConnectionStatus('connected');
+                            } else if (data.connecting) {
+                                updateConnectionStatus('connecting');
+                            } else if (data.qrGenerated) {
+                                updateConnectionStatus('qr_generated');
+                            } else {
+                                updateConnectionStatus('disconnected');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error fetching status:', error);
+                            updateConnectionStatus('disconnected');
+                        });
+                });
+            }
+            
+            // Initial status check
+            fetch('/api/status')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.connected) {
+                        updateConnectionStatus('connected');
+                    } else if (data.connecting) {
+                        updateConnectionStatus('connecting');
+                    } else if (data.qrGenerated) {
+                        updateConnectionStatus('qr_generated');
+                        showToast('QR code already generated. Check your email or refresh to view.', 'info');
+                    } else {
+                        updateConnectionStatus('disconnected');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching status:', error);
+                    updateConnectionStatus('disconnected');
+                });
+            
+            // Toast notification function
+            function showToast(message, type = 'info') {
+                const toast = document.getElementById('toast');
+                const toastIcon = document.getElementById('toast-icon');
+                const toastMessage = document.getElementById('toast-message');
+                
+                const icons = {
+                    success: 'fa-check-circle',
+                    error: 'fa-exclamation-circle',
+                    info: 'fa-info-circle'
+                };
+                
+                toastIcon.className = `fas ${icons[type] || icons.info} mr-2`;
+                toastMessage.textContent = message;
+                toast.classList.remove('hidden', 'translate-y-16');
+                
+                setTimeout(() => {
+                    toast.classList.add('translate-y-16');
+                    setTimeout(() => {
+                        toast.classList.add('hidden');
+                    }, 300);
+                }, 3000);
+            }
+
+            // Connection polling when QR is shown
+            let connectionPollingInterval = null;
+            
+            function startConnectionPolling() {
+                // Clear any existing polling
+                if (connectionPollingInterval) {
+                    clearInterval(connectionPollingInterval);
+                }
+                
+                // Poll every 2 seconds
+                connectionPollingInterval = setInterval(async () => {
+                    try {
+                        const response = await fetch('/api/status');
+                        const data = await response.json();
+                        
+                        if (data.connected) {
+                            // Stop polling when connected
+                            stopConnectionPolling();
+                            updateConnectionStatus('connected');
+                            showToast('WhatsApp connected successfully!', 'success');
+                        }
+                    } catch (error) {
+                        console.error('Error polling connection status:', error);
+                    }
+                }, 2000);
+            }
+            
+            function stopConnectionPolling() {
+                if (connectionPollingInterval) {
+                    clearInterval(connectionPollingInterval);
+                    connectionPollingInterval = null;
+                }
+            }
+
+            // Send message button functionality
+            const sendMessageBtn = document.getElementById('send-message-btn');
+            
+            sendMessageBtn.addEventListener('click', async function() {
+                const message = messageInput.value.trim();
+                const phoneNumber = document.getElementById('phone-number').value.trim();
+                const countryCode = document.getElementById('phone-country-code').value;
+                
+                if (!phoneNumber) {
+                    showToast('Please enter a phone number', 'error');
+                    return;
+                }
+                
+                if (!message && !currentAttachment.file) {
+                    showToast('Please enter a message or attach a file', 'error');
+                    return;
+                }
+                
+                // Create FormData to send message with optional media attachment
+                const formData = new FormData();
+                formData.append('number', countryCode + phoneNumber);
+                formData.append('message', message);
+                
+                if (currentAttachment.file) {
+                    formData.append('media', currentAttachment.file);
+                    formData.append('caption', message);
+                }
+                
+                // Disable button while sending
+                sendMessageBtn.disabled = true;
+                sendMessageBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Sending...';
+                
+                try {
+                    const response = await fetch('/api/send', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        showToast('Message sent successfully!', 'success');
+                        // Clear message and attachment
+                        messageInput.value = '';
+                        document.getElementById('phone-number').value = '';
+                        previewText.textContent = 'Type your message here...';
+                        if (currentAttachment.file) {
+                            currentAttachment.file = null;
+                            attachmentPreview.classList.add('hidden');
+                            previewAttachment.classList.add('hidden');
+                            mediaInput.value = '';
+                        }
+                    } else {
+                        showToast(data.error || 'Failed to send message', 'error');
+                    }
+                } catch (error) {
+                    console.error('Error sending message:', error);
+                    showToast('Error sending message: ' + error.message, 'error');
+                } finally {
+                    // Re-enable button
+                    sendMessageBtn.disabled = false;
+                    sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane mr-2"></i>Send Message';
+                }
+            });
+            
+            // Update file attachment handler to store the file for sending
+            mediaInput.addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if (file) {
+                    currentAttachment.file = file;
+                }
+            });
+            
+            // Update remove attachment handler to clear stored file
+            removeAttachment.addEventListener('click', function() {
+                currentAttachment.file = null;
+                attachmentPreview.classList.add('hidden');
+                previewAttachment.classList.add('hidden');
+                mediaInput.value = '';
+            });
 
             // Format country code with flags
             function formatCountry(option) {

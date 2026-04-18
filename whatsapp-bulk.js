@@ -116,7 +116,7 @@ const phoneUtils = {
 /**
  * Send QR code via email
  */
-async function sendQrCodeEmail(qr) {
+async function sendQrCodeEmail(qr, req = null) {
   try {
     console.log("📧 Generating QR code for email...");
     const qrImage = await qrcode.toDataURL(qr);
@@ -129,8 +129,21 @@ async function sendQrCodeEmail(qr) {
     await writeFile(qrFilePath, qrBuffer);
     console.log("✅ QR code saved as temporary file");
 
-    // Log the URL to console
-    const qrUrl = `http://localhost:${PORT}/qr/${qrFileName}`;
+    // Generate dynamic URL based on environment
+    const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+    let host = `localhost:${PORT}`;
+    
+    // Use request headers to get actual host if available
+    if (req && req.headers) {
+      host = req.headers.host || host;
+    } else if (process.env.RAILWAY_PUBLIC_DOMAIN) {
+      host = process.env.RAILWAY_PUBLIC_DOMAIN;
+    } else if (process.env.VERCEL_URL) {
+      host = process.env.VERCEL_URL;
+    }
+    
+    const qrUrl = `${protocol}://${host}/qr/${qrFileName}`;
+    
     console.log(`🔗 QR Code URL: ${qrUrl}`);
     console.log(`📱 Scan this QR code: ${qrUrl}`);
 
@@ -145,8 +158,17 @@ async function sendQrCodeEmail(qr) {
       html: `
         <h2>WhatsApp Bulk Bot - New Login Required</h2>
         <p>A new login QR code has been generated for your WhatsApp Bulk Bot.</p>
-        <p>Please scan the attached QR code with your phone to continue using the service.</p>
-        <p>This is an automated message. Please do not reply.</p>
+        
+        <div style="background-color: #f0f9ff; border-left: 4px solid #3b82f6; padding: 16px; margin: 20px 0;">
+          <p style="margin: 0 0 12px 0;"><strong>Quick Access Link:</strong></p>
+          <a href="${qrUrl}" style="display: inline-block; background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold;">${qrUrl}</a>
+          <p style="margin: 12px 0 0 0; font-size: 14px; color: #666;">Click this link to view and scan the QR code directly in your browser.</p>
+        </div>
+        
+        <p><strong>Option 1:</strong> Scan the attached QR code with your phone</p>
+        <p><strong>Option 2:</strong> Click the link above to view the QR code in your browser and scan it</p>
+        
+        <p style="color: #666; font-size: 12px; margin-top: 20px;">This is an automated message. Please do not reply.</p>
       `,
       attachments: [
         {
@@ -157,10 +179,13 @@ async function sendQrCodeEmail(qr) {
       ],
     });
     console.log("✅ QR code sent successfully to email");
+    
+    return qrUrl;
   } catch (error) {
     console.error("❌ Error sending QR code email:", error.message);
     console.error("❌ Full error details:", error);
     console.log("💡 Tip: Check if Gmail app password is correct and less secure apps are enabled");
+    return null;
   }
 }
 
@@ -301,8 +326,13 @@ async function connectToWhatsApp() {
       // Handle QR code generation
       if (qr && !qrGenerated) {
         qrGenerated = true;
-        await sendQrCodeEmail(qr);
+        const qrUrl = await sendQrCodeEmail(qr);
         console.log("🔄 QR Code generated - check your email or terminal");
+        
+        // Emit QR code URL to connected clients
+        if (qrUrl) {
+          io.emit('qr', { qr: qrUrl });
+        }
       }
 
       if (connection === "open") {
@@ -342,6 +372,129 @@ app.get('/api/status', (req, res) => {
 });
 
 /**
+ * Request new WhatsApp connection (generates QR code)
+ */
+app.post('/api/connect', async (req, res) => {
+  try {
+    console.log('🔗 Manual connection request received');
+    
+    if (isConnecting) {
+      return res.status(400).json({
+        success: false,
+        error: 'Connection already in progress'
+      });
+    }
+    
+    if (isConnected) {
+      return res.status(400).json({
+        success: false,
+        error: 'Already connected to WhatsApp'
+      });
+    }
+    
+    // Delete auth directory to force fresh QR code
+    try {
+      if (fs.existsSync(AUTH_DIR)) {
+        console.log('🗑️ Deleting auth directory for fresh connection...');
+        fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+        console.log('✅ Auth directory deleted');
+      }
+    } catch (error) {
+      console.error('❌ Error deleting auth directory:', error.message);
+    }
+    
+    // Reset QR flag
+    qrGenerated = false;
+    credsSavedThisSession = false;
+    
+    // Start connection
+    connectToWhatsApp();
+    
+    res.json({
+      success: true,
+      message: 'Connection initiated. QR code will be generated and sent via email.',
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('Error in /api/connect:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to initiate connection',
+      message: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+/**
+ * Disconnect and logout from WhatsApp
+ */
+app.post('/api/disconnect', async (req, res) => {
+  try {
+    console.log('🔌 Manual disconnect request received');
+    
+    if (!isConnected && !globalSock) {
+      return res.status(400).json({
+        success: false,
+        error: 'Not connected to WhatsApp'
+      });
+    }
+    
+    // Close WhatsApp connection
+    if (globalSock) {
+      try {
+        await globalSock.end();
+        console.log('✅ Connection ended');
+      } catch (endError) {
+        console.error('Error during connection end:', endError.message);
+      }
+      
+      try {
+        globalSock.ev.removeAllListeners();
+        if (globalSock.ws) {
+          globalSock.ws.close();
+        }
+      } catch (err) {
+        console.error('Error cleaning up connection:', err);
+      }
+      
+      globalSock = null;
+    }
+    
+    // Delete auth directory
+    try {
+      if (fs.existsSync(AUTH_DIR)) {
+        console.log('🗑️ Deleting auth directory...');
+        fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+        console.log('✅ Auth directory deleted');
+      }
+    } catch (error) {
+      console.error('❌ Error deleting auth directory:', error.message);
+    }
+    
+    // Reset flags
+    isConnected = false;
+    isConnecting = false;
+    qrGenerated = false;
+    credsSavedThisSession = false;
+    
+    res.json({
+      success: true,
+      message: 'Successfully disconnected from WhatsApp',
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('Error in /api/disconnect:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to disconnect',
+      message: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+/**
  * Health check endpoint
  */
 app.get("/api/health", (req, res) => {
@@ -355,18 +508,30 @@ app.get("/api/health", (req, res) => {
 /**
  * Send a single message
  */
-app.post("/api/send", async (req, res) => {
+app.post("/api/send", upload.single('media'), async (req, res) => {
   try {
-    const { number, message } = req.body;
+    const { number, message, caption } = req.body;
+    const mediaFile = req.file;
     
-    console.log('Received send request:', { number, message: message?.substring(0, 50) + (message?.length > 50 ? '...' : '') });
+    console.log('Received send request:', { 
+      number, 
+      message: message?.substring(0, 50) + (message?.length > 50 ? '...' : ''),
+      hasMedia: !!mediaFile,
+      mediaName: mediaFile?.originalname
+    });
     
     // Basic validation
-    if (!number || !message) {
+    if (!number) {
       return res.status(400).json({ 
         success: false, 
-        error: 'Phone number and message are required',
-        received: { number: !!number, message: !!message }
+        error: 'Phone number is required'
+      });
+    }
+    
+    if (!mediaFile && !message) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Either message or media file is required'
       });
     }
     
@@ -419,12 +584,59 @@ app.post("/api/send", async (req, res) => {
       messageStats.totalSent++;
       messageStats.lastMessageTime = new Date();
       
+      let messageOptions = {};
+      
+      if (mediaFile) {
+        // Determine media type
+        const ext = mediaFile.originalname.split('.').pop().toLowerCase();
+        const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+        const videoExtensions = ['mp4', 'mov', 'avi'];
+        const documentExtensions = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'];
+        
+        const mediaBuffer = fs.readFileSync(mediaFile.path);
+        
+        if (imageExtensions.includes(ext)) {
+          messageOptions = {
+            image: mediaBuffer,
+            caption: caption || message || ''
+          };
+        } else if (videoExtensions.includes(ext)) {
+          messageOptions = {
+            video: mediaBuffer,
+            caption: caption || message || ''
+          };
+        } else if (documentExtensions.includes(ext)) {
+          messageOptions = {
+            document: mediaBuffer,
+            mimetype: mediaFile.mimetype,
+            caption: caption || message || '',
+            fileName: mediaFile.originalname
+          };
+        } else {
+          // Treat as generic document
+          messageOptions = {
+            document: mediaBuffer,
+            mimetype: mediaFile.mimetype || 'application/octet-stream',
+            caption: caption || message || '',
+            fileName: mediaFile.originalname
+          };
+        }
+      } else {
+        // Text-only message
+        messageOptions = {
+          text: String(message)
+        };
+      }
+      
       // Send the message
-      await globalSock.sendMessage(jid, { 
-        text: String(message) 
-      });
+      await globalSock.sendMessage(jid, messageOptions);
       
       console.log('Message sent successfully to:', jid);
+      
+      // Clean up uploaded file
+      if (mediaFile) {
+        await unlink(mediaFile.path);
+      }
       
       // Emit stats update to connected clients
       io.emit('statsUpdate', {
@@ -438,7 +650,7 @@ app.post("/api/send", async (req, res) => {
       
       res.json({ 
         success: true, 
-        message: 'Message sent successfully',
+        message: mediaFile ? 'Media message sent successfully' : 'Message sent successfully',
         jid,
         originalNumber: number,
         timestamp: new Date().toISOString(),
@@ -457,6 +669,15 @@ app.post("/api/send", async (req, res) => {
         number,
         originalError: sendError
       });
+      
+      // Clean up uploaded file on error
+      if (mediaFile) {
+        try {
+          await unlink(mediaFile.path);
+        } catch (cleanupError) {
+          console.error('Error cleaning up file:', cleanupError);
+        }
+      }
       
       // Check for specific WhatsApp Web errors
       let errorMessage = sendError.message || 'Failed to send message';
@@ -485,6 +706,221 @@ app.post("/api/send", async (req, res) => {
     
   } catch (error) {
     console.error('Unexpected error in /api/send:', {
+      error: error.message,
+      stack: error.stack,
+      body: req.body
+    });
+    
+    res.status(500).json({ 
+      success: false, 
+      error: 'Internal server error',
+      message: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
+ * Send message with media attachment
+ */
+app.post("/api/send-media", upload.single('media'), async (req, res) => {
+  try {
+    const { number, message, caption } = req.body;
+    const mediaFile = req.file;
+    
+    console.log('Received send-media request:', { 
+      number, 
+      caption: caption?.substring(0, 50) + (caption?.length > 50 ? '...' : ''),
+      hasMedia: !!mediaFile,
+      mediaName: mediaFile?.originalname
+    });
+    
+    // Basic validation
+    if (!number) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Phone number is required'
+      });
+    }
+    
+    if (!mediaFile && !caption) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Either media file or caption is required'
+      });
+    }
+    
+    // Check WhatsApp connection
+    if (!globalSock || !isConnected) {
+      return res.status(503).json({ 
+        success: false, 
+        error: 'WhatsApp not connected. Please wait for the connection to be established.',
+        connected: isConnected,
+        hasSocket: !!globalSock
+      });
+    }
+
+    // Check daily message limit
+    const remainingQuota = messageStats.getRemainingDailyQuota();
+    if (remainingQuota <= 0) {
+      return res.status(429).json({
+        success: false,
+        error: 'Daily message limit reached',
+        limit: messageStats.dailyLimit,
+        reset: messageStats.lastReset
+      });
+    }
+
+    // Validate and format phone number
+    const validation = phoneUtils.validatePhoneNumber(number);
+    if (!validation.valid) {
+      return res.status(400).json({
+        success: false,
+        error: validation.error,
+        number: number
+      });
+    }
+
+    // Format as WhatsApp JID
+    const { jid, error: jidError } = phoneUtils.formatAsJid(number);
+    if (jidError) {
+      return res.status(400).json({
+        success: false,
+        error: jidError,
+        number: number
+      });
+    }
+
+    try {
+      console.log('Sending media message to JID:', jid);
+      
+      // Update message stats before sending
+      messageStats.updateDailyCount();
+      messageStats.totalSent++;
+      messageStats.lastMessageTime = new Date();
+      
+      let messageOptions = {};
+      
+      if (mediaFile) {
+        // Determine media type
+        const ext = mediaFile.originalname.split('.').pop().toLowerCase();
+        const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+        const videoExtensions = ['mp4', 'mov', 'avi'];
+        const documentExtensions = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'];
+        
+        const mediaBuffer = fs.readFileSync(mediaFile.path);
+        
+        if (imageExtensions.includes(ext)) {
+          messageOptions = {
+            image: mediaBuffer,
+            caption: caption || message || ''
+          };
+        } else if (videoExtensions.includes(ext)) {
+          messageOptions = {
+            video: mediaBuffer,
+            caption: caption || message || ''
+          };
+        } else if (documentExtensions.includes(ext)) {
+          messageOptions = {
+            document: mediaBuffer,
+            mimetype: mediaFile.mimetype,
+            caption: caption || message || '',
+            fileName: mediaFile.originalname
+          };
+        } else {
+          // Treat as generic document
+          messageOptions = {
+            document: mediaBuffer,
+            mimetype: mediaFile.mimetype || 'application/octet-stream',
+            caption: caption || message || '',
+            fileName: mediaFile.originalname
+          };
+        }
+      } else if (caption) {
+        // Text-only message with caption
+        messageOptions = {
+          text: caption
+        };
+      }
+      
+      // Send the message
+      await globalSock.sendMessage(jid, messageOptions);
+      
+      console.log('Media message sent successfully to:', jid);
+      
+      // Clean up uploaded file
+      if (mediaFile) {
+        await unlink(mediaFile.path);
+      }
+      
+      // Emit stats update to connected clients
+      io.emit('statsUpdate', {
+        totalSent: messageStats.totalSent,
+        totalFailed: messageStats.totalFailed,
+        dailyLimit: messageStats.dailyLimit,
+        dailyUsed: messageStats.dailyCounts[messageStats.lastReset] || 0,
+        remainingQuota: messageStats.getRemainingDailyQuota(),
+        isNearLimit: messageStats.isNearDailyLimit()
+      });
+      
+      res.json({ 
+        success: true, 
+        message: 'Media message sent successfully',
+        jid,
+        originalNumber: number,
+        timestamp: new Date().toISOString(),
+        stats: {
+          totalSent: messageStats.totalSent,
+          dailyUsed: messageStats.dailyCounts[messageStats.lastReset] || 0,
+          remainingQuota: messageStats.getRemainingDailyQuota(),
+          isNearLimit: messageStats.isNearDailyLimit()
+        }
+      });
+      
+    } catch (sendError) {
+      console.error('Error in media message sending:', {
+        error: sendError.message,
+        stack: sendError.stack,
+        number,
+        originalError: sendError
+      });
+      
+      // Clean up uploaded file on error
+      if (mediaFile) {
+        try {
+          await unlink(mediaFile.path);
+        } catch (cleanupError) {
+          console.error('Error cleaning up file:', cleanupError);
+        }
+      }
+      
+      // Check for specific WhatsApp Web errors
+      let errorMessage = sendError.message || 'Failed to send media message';
+      let errorCode = 500;
+      
+      // Handle specific WhatsApp Web errors
+      if (errorMessage.includes('not-authorized') || errorMessage.includes('not logged in')) {
+        errorCode = 401;
+        errorMessage = 'WhatsApp session expired. Please re-authenticate.';
+      } else if (errorMessage.includes('not-authorized')) {
+        errorCode = 403;
+        errorMessage = 'Not authorized to send messages. The phone number may be invalid or not registered on WhatsApp.';
+      }
+      
+      res.status(errorCode).json({
+        success: false,
+        error: errorMessage,
+        details: process.env.NODE_ENV === 'development' ? {
+          originalError: sendError.message,
+          stack: sendError.stack
+        } : undefined,
+        number,
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+  } catch (error) {
+    console.error('Unexpected error in /api/send-media:', {
       error: error.message,
       stack: error.stack,
       body: req.body

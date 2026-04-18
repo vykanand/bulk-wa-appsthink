@@ -618,12 +618,31 @@ const WhatsAppBulkSender = (() => {
         }
       });
 
-      // Send message via API
-      const response = await fetch('/api/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ number: phoneNumber, message })
-      });
+      // Check if there's a media attachment from the WhatsApp-like composer
+      const mediaInput = document.getElementById('media-input');
+      const composerAttachment = window.currentAttachment?.file;
+
+      let response;
+      if (composerAttachment) {
+        // Send with media attachment using FormData
+        const formData = new FormData();
+        formData.append('number', phoneNumber);
+        formData.append('message', message);
+        formData.append('media', composerAttachment);
+        formData.append('caption', message);
+
+        response = await fetch('/api/send', {
+          method: 'POST',
+          body: formData
+        });
+      } else {
+        // Send as text-only message
+        response = await fetch('/api/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ number: phoneNumber, message })
+        });
+      }
 
       const data = await response.json();
 
@@ -682,6 +701,18 @@ const WhatsAppBulkSender = (() => {
     
     elements.startSendingBtn.disabled = false;
     elements.stopSendingBtn.classList.add('hidden');
+    
+    // Clear media attachment after bulk sending
+    if (window.currentAttachment && window.currentAttachment.file) {
+      window.currentAttachment.file = null;
+      // Update UI to hide attachment preview
+      const attachmentPreview = document.getElementById('attachment-preview');
+      const previewAttachment = document.getElementById('preview-attachment');
+      const mediaInput = document.getElementById('media-input');
+      if (attachmentPreview) attachmentPreview.classList.add('hidden');
+      if (previewAttachment) previewAttachment.classList.add('hidden');
+      if (mediaInput) mediaInput.value = '';
+    }
     
     showToast('Sending stopped', 'warning');
     addActivityLog('Sending was stopped by user', 'warning');
