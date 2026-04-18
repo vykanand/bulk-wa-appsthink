@@ -120,6 +120,20 @@ async function sendQrCodeEmail(qr) {
   try {
     console.log("📧 Generating QR code for email...");
     const qrImage = await qrcode.toDataURL(qr);
+
+    // Save QR code as temporary file
+    const timestamp = Date.now();
+    const qrFileName = `wa-qr-${timestamp}.png`;
+    const qrFilePath = path.join(QR_DIR, qrFileName);
+    const qrBuffer = Buffer.from(qrImage.split("base64,")[1], "base64");
+    await writeFile(qrFilePath, qrBuffer);
+    console.log("✅ QR code saved as temporary file");
+
+    // Log the URL to console
+    const qrUrl = `http://localhost:${PORT}/qr/${qrFileName}`;
+    console.log(`🔗 QR Code URL: ${qrUrl}`);
+    console.log(`📱 Scan this QR code: ${qrUrl}`);
+
     console.log("✅ QR code generated, creating email transporter...");
     const transporter = nodemailer.createTransport(emailConfig);
 
