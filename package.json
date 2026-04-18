@@ -1,0 +1,23 @@
+{
+  "name": "whatsapp-bulk-sender",
+  "version": "1.0.0",
+  "description": "Standalone WhatsApp bulk message sender with web interface",
+  "main": "whatsapp-bulk.js",
+  "type": "module",
+  "scripts": {
+    "start": "node whatsapp-bulk.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^5.1.0",
+    "maher-zubair-baileys": "^6.6.5",
+    "multer": "^1.4.5-lts.1",
+    "nodemailer": "^7.0.4",
+    "pino": "^9.7.0",
+    "pino-pretty": "^13.0.0",
+    "qrcode": "^1.5.4",
+    "socket.io": "^4.5.4",
+    "xlsx": "^0.18.5"
+  }
+}
